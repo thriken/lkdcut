@@ -1,0 +1,1 @@
+pyinstaller --noconfirm --onefile --windowed --add-data="origin.xls:." --upx-dir "D:\upx-4.2.2-win64" --clean --name "玻璃切割数据管理" "D:\Project\cut\cut.py"
