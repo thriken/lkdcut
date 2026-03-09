@@ -285,13 +285,15 @@ class GFileViewer(QMainWindow):
 
     def setup_table(self):
         """设置表格"""
-        # 定义列 - 去除序号列和标2相关列
+        # 定义列 - 添加BL切割尺寸列
         columns = [
             '客户名\n(宝伦7)',
             '货架号\n(宝伦9)',
             '订单尺寸\n(宝伦10)',
             '订单标记\n(宝伦11)',
             '条码号\n(宝伦15)',
+            'BL尺寸X\n(宝伦1)',
+            'BL尺寸Y\n(宝伦2)',
             '3C基准边\n(宝伦18)',
             '3C料号\n(宝伦17)',
             '3C角位号\n(宝伦19)',
@@ -301,7 +303,7 @@ class GFileViewer(QMainWindow):
         self.table.setHorizontalHeaderLabels(columns)
 
         # 设置列宽 - 适配1360*768
-        column_widths = [100, 100, 110, 110, 140, 80, 90, 80]
+        column_widths = [100, 100, 110, 110, 140, 80, 80, 80, 90, 80]
         for i, width in enumerate(column_widths):
             self.table.setColumnWidth(i, width)
 
@@ -442,18 +444,20 @@ class GFileViewer(QMainWindow):
 
         # 添加数据
         for row_idx, piece in enumerate(self.p4000_data):
-            # 显示的字段: 7,9,10,11,15,18,17,19 (去除标2相关列)
+            # 显示的字段: 7,9,10,11,15,1,2,18,17,19
             self.table.setItem(row_idx, 0, QTableWidgetItem(piece['宝伦7']))   # 客户名
             self.table.setItem(row_idx, 1, QTableWidgetItem(piece['宝伦9']))   # 货架号
             self.table.setItem(row_idx, 2, QTableWidgetItem(piece['宝伦10']))  # 订单号
             self.table.setItem(row_idx, 3, QTableWidgetItem(piece['宝伦11']))  # 订单尺寸
             self.table.setItem(row_idx, 4, QTableWidgetItem(piece['宝伦15']))  # 条码号
-            self.table.setItem(row_idx, 5, QTableWidgetItem(piece['宝伦18']))  # 基准边1
-            self.table.setItem(row_idx, 6, QTableWidgetItem(piece['宝伦17']))  # 标签1模板
-            self.table.setItem(row_idx, 7, QTableWidgetItem(piece['宝伦19']))  # 角位号1
+            self.table.setItem(row_idx, 5, QTableWidgetItem(piece['宝伦1']))   # BL尺寸X
+            self.table.setItem(row_idx, 6, QTableWidgetItem(piece['宝伦2']))   # BL尺寸Y
+            self.table.setItem(row_idx, 7, QTableWidgetItem(piece['宝伦18']))  # 基准边1
+            self.table.setItem(row_idx, 8, QTableWidgetItem(piece['宝伦17'])) # 标签1模板
+            self.table.setItem(row_idx, 9, QTableWidgetItem(piece['宝伦19'])) # 角位号1
 
             # 设置单元格对齐
-            for col in range(8):
+            for col in range(10):
                 item = self.table.item(row_idx, col)
                 if item:
                     item.setTextAlignment(Qt.AlignCenter)
@@ -521,8 +525,8 @@ class GFileViewer(QMainWindow):
 
     def update_c3_info(self, row):
         """更新3C信息显示"""
-        # 获取宝伦17列(索引6)的料号
-        item = self.table.item(row, 6)
+        # 获取宝伦17列(索引8)的料号
+        item = self.table.item(row, 8)
         if not item:
             self.clear_c3_info()
             return
