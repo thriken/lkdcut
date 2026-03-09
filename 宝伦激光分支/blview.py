@@ -27,8 +27,10 @@ class GFileViewer(QMainWindow):
     def __init__(self):
         super().__init__()
         self.current_file = None
+        self.current_folder = None  # 当前文件夹
         self.p3000_data = {}  # P300x数据
         self.p4000_data = []  # P40xx数据
+        self.all_pieces_data = []  # 所有文件的小片数据列表
         self.db_conn = None  # 数据库连接
         self.network_manager = QNetworkAccessManager()  # 网络管理器,用于下载图片
 
@@ -112,11 +114,7 @@ class GFileViewer(QMainWindow):
         line.setFrameShadow(QFrame.Sunken)
         main_layout.addWidget(line)
 
-        # 上部：原片信息
-        sheet_group = self.create_sheet_info_group()
-        main_layout.addWidget(sheet_group)
-
-        # 下部：小片信息表格
+        # 小片信息表格
         piece_group = self.create_piece_info_group()
         main_layout.addWidget(piece_group)
 
@@ -127,6 +125,12 @@ class GFileViewer(QMainWindow):
         open_btn.setFont(QFont("Arial", 10))
         open_btn.clicked.connect(self.open_file)
         layout.addWidget(open_btn)
+
+        open_folder_btn = QPushButton("读取文件夹")
+        open_folder_btn.setFixedWidth(100)
+        open_folder_btn.setFont(QFont("Arial", 10))
+        open_folder_btn.clicked.connect(self.open_folder)
+        layout.addWidget(open_folder_btn)
 
         self.file_label = QLabel("未选择文件")
         self.file_label.setStyleSheet("color: gray; font-size: 11px;")
@@ -139,46 +143,70 @@ class GFileViewer(QMainWindow):
         group = QGroupBox("原片参数 (P300x)")
         group.setFont(QFont("Arial", 10, QFont.Bold))
 
-        layout = QHBoxLayout()
-        layout.setSpacing(10)
+        layout = QVBoxLayout()
+        layout.setSpacing(8)
 
         # 创建字段变量
         self.sheet_vars = {
-            'P3000': QLineEdit(),
-            'P3001': QLineEdit(),
-            'P3007': QLineEdit(),
-            'P3011': QLineEdit(),
+            'P3000': QLabel(),
+            'P3001': QLabel(),
+            'P3007': QLabel(),
+            'P3011': QLabel(),
         }
+        self.piece_seq_label = QLabel()  # 片序号标签
 
-        labels = {
-            'P3000': '原片宽度 (P3000):',
-            'P3001': '原片高度 (P3001):',
-            'P3007': '原片名称 (P3007):',
-            'P3011': '原片厚度 (P3011):',
-        }
+        # 字段显示配置
+        field_config = [
+            ('P3000', '原片宽度'),
+            ('P3001', '原片高度'),
+            ('P3007', '原片名称'),
+            ('P3011', '原片厚度'),
+            ('seq', '小片序号', self.piece_seq_label),  # 特殊处理片序号
+        ]
 
-        # 使用水平布局显示原片信息
-        for key, label_text in labels.items():
-            label = QLabel(label_text)
-            label.setFont(QFont("Arial", 9))
-            label.setMinimumWidth(120)
-            layout.addWidget(label)
+        # 使用统一的布局显示原片信息
+        grid_layout = QVBoxLayout()
+        grid_layout.setSpacing(8)
 
-            edit = self.sheet_vars[key]
-            edit.setFixedWidth(100)
-            edit.setReadOnly(True)
-            edit.setFont(QFont("Arial", 9))
-            layout.addWidget(edit)
+        for item in field_config:
+            row_layout = QHBoxLayout()
+            row_layout.setSpacing(10)
 
-            layout.addSpacing(15)
+            if len(item) == 3:
+                # 特殊项: 片序号
+                key, label_text, widget = item
+                label = QLabel(f"{label_text}:")
+                label.setFont(QFont("Arial", 9))
+                label.setMinimumWidth(80)
+                row_layout.addWidget(label)
 
+                widget.setFixedWidth(100)
+                widget.setFont(QFont("Arial", 9))
+                row_layout.addWidget(widget)
+            else:
+                # 普通项: 原片参数
+                key, label_text = item
+                label = QLabel(f"{label_text}:")
+                label.setFont(QFont("Arial", 9))
+                label.setMinimumWidth(80)
+                row_layout.addWidget(label)
+
+                edit = self.sheet_vars[key]
+                edit.setFixedWidth(100)
+                edit.setFont(QFont("Arial", 9))
+                row_layout.addWidget(edit)
+
+            row_layout.addStretch()
+            grid_layout.addLayout(row_layout)
+
+        layout.addLayout(grid_layout)
         layout.addStretch()
         group.setLayout(layout)
         return group
 
     def create_piece_info_group(self):
         """创建小片信息组"""
-        group = QGroupBox("小片信息 (P40xx)")
+        group = QGroupBox("小片信息")
         group.setFont(QFont("Arial", 10, QFont.Bold))
 
         layout = QVBoxLayout()
@@ -207,13 +235,17 @@ class GFileViewer(QMainWindow):
         table_layout.addWidget(self.table)
         main_split.addWidget(table_container)  # 不设置stretch,会自动扩展
 
-        # 右侧: 3C信息 - 固定宽度320px
+        # 右侧: 信息区 - 固定宽度320px
         c3_container = QWidget()
         c3_container.setFixedWidth(320)
         c3_layout = QVBoxLayout(c3_container)
         c3_layout.setContentsMargins(0, 0, 0, 0)
 
-        # 创建3C信息显示区域
+        # 创建原片信息显示区域(放于上方)
+        sheet_info_group = self.create_sheet_info_group()
+        c3_layout.addWidget(sheet_info_group)
+
+        # 创建3C信息显示区域(放于下方)
         c3_info_group = QGroupBox("3C料号信息")
         c3_info_group.setFont(QFont("Arial", 10, QFont.Bold))
 
@@ -285,8 +317,9 @@ class GFileViewer(QMainWindow):
 
     def setup_table(self):
         """设置表格"""
-        # 定义列 - 添加BL切割尺寸列
+        # 定义列 - 添加文件名列和BL切割尺寸列
         columns = [
+            '文件名',
             '客户名\n(宝伦7)',
             '货架号\n(宝伦9)',
             '订单尺寸\n(宝伦10)',
@@ -303,7 +336,7 @@ class GFileViewer(QMainWindow):
         self.table.setHorizontalHeaderLabels(columns)
 
         # 设置列宽 - 适配1360*768
-        column_widths = [100, 100, 110, 110, 140, 80, 80, 80, 90, 80]
+        column_widths = [150, 90, 90, 100, 100, 110, 70, 70, 70, 80, 70]
         for i, width in enumerate(column_widths):
             self.table.setColumnWidth(i, width)
 
@@ -333,6 +366,17 @@ class GFileViewer(QMainWindow):
         if filepath:
             self.parse_file(filepath)
 
+    def open_folder(self):
+        """读取文件夹中的所有G文件"""
+        folder = QFileDialog.getExistingDirectory(
+            self,
+            "选择包含G文件的文件夹",
+            ""
+        )
+
+        if folder:
+            self.parse_folder(folder)
+
     def parse_file(self, filepath):
         """解析G文件"""
         try:
@@ -351,14 +395,22 @@ class GFileViewer(QMainWindow):
                 return
 
             self.current_file = filepath
+            self.current_folder = None
             self.file_label.setText(os.path.basename(filepath))
             self.file_label.setStyleSheet("color: black;")
 
             # 清空之前的数据
             self.p3000_data = {}
             self.p4000_data = []
+            self.all_pieces_data = []
+
+            # 解析文件名获取原片序号
+            # 文件名格式: 订单单号_原片序号_片数量_原片长_原片高.g
+            # 例如: YH260307058_003_1_3660_3000.g
+            sheet_seq = self.parse_sheet_sequence(os.path.basename(filepath))
 
             # 解析文件
+            piece_seq = 0  # 片序号计数器
             for line in lines:
                 line = line.strip()
                 if not line:
@@ -378,14 +430,96 @@ class GFileViewer(QMainWindow):
                     param_num = int(match_p400.group(1))
                     data_string = match_p400.group(2).strip()
                     piece_data = self.parse_piece_data(data_string, param_num)
+                    piece_data['文件名'] = os.path.basename(filepath)
+                    piece_data['原片序号'] = sheet_seq  # 保存原片序号
+                    piece_data['片序号'] = piece_seq + 1  # 保存片序号(从1开始)
+                    piece_seq += 1
                     self.p4000_data.append(piece_data)
 
             # 更新界面
-            self.update_sheet_info()
+            self.clear_sheet_info()  # 清空原片信息,等待选择后加载
             self.update_piece_info()
 
         except Exception as e:
             QMessageBox.critical(self, "错误", f"解析文件失败: {str(e)}")
+
+    def parse_folder(self, folder):
+        """解析文件夹中的所有G文件"""
+        try:
+            self.current_folder = folder
+            self.current_file = None
+            self.file_label.setText(f"文件夹: {os.path.basename(folder)} ({len(os.listdir(folder))} 个文件)")
+            self.file_label.setStyleSheet("color: black;")
+
+            # 清空之前的数据
+            self.p3000_data = {}
+            self.p4000_data = []
+            self.all_pieces_data = []
+
+            # 遍历文件夹中的所有文件
+            files = sorted([f for f in os.listdir(folder) if f.lower().endswith('.g')])
+
+            for filename in files:
+                filepath = os.path.join(folder, filename)
+                try:
+                    # 尝试不同的编码
+                    lines = None
+                    for encoding in ['gb2312', 'utf-8', 'gbk']:
+                        try:
+                            with open(filepath, 'r', encoding=encoding, errors='ignore') as f:
+                                lines = f.readlines()
+                            break
+                        except:
+                            continue
+
+                    if lines is None:
+                        continue
+
+                    # 解析文件名获取原片序号
+                    # 文件名格式: 订单单号_原片序号_片数量_原片长_原片高.g
+                    # 例如: YH260307058_003_1_3660_3000.g
+                    sheet_seq = self.parse_sheet_sequence(filename)
+
+                    # 解析文件
+                    file_p4000_data = []
+                    file_sheet_data = {}  # 当前文件的原片信息
+                    piece_seq = 0  # 每个文件独立的片序号
+                    for line in lines:
+                        line = line.strip()
+                        if not line:
+                            continue
+
+                        # 解析P300x参数(当前文件的原片参数)
+                        match_p300 = re.match(r'^N\d{2}\s+P(30\d{2})\s*=\s*(.*)', line)
+                        if match_p300:
+                            param_name = f'P{match_p300.group(1)}'
+                            param_value = match_p300.group(2).strip()
+                            file_sheet_data[param_name] = param_value
+
+                        # 解析P40xx小片数据
+                        match_p400 = re.match(r'^N\d{2}\s+P(4\d{3})\s*=\s*(.+)', line)
+                        if match_p400:
+                            param_num = int(match_p400.group(1))
+                            data_string = match_p400.group(2).strip()
+                            piece_data = self.parse_piece_data(data_string, param_num)
+                            piece_data['文件名'] = filename
+                            piece_data['原片序号'] = sheet_seq  # 保存原片序号
+                            piece_data['片序号'] = piece_seq + 1  # 保存片序号
+                            piece_data['原片信息'] = file_sheet_data.copy()  # 保存该文件的原片信息
+                            piece_seq += 1
+                            file_p4000_data.append(piece_data)
+
+                    self.all_pieces_data.extend(file_p4000_data)
+
+                except Exception as e:
+                    continue  # 跳过有问题的文件
+
+            # 更新界面
+            self.clear_sheet_info()  # 清空原片信息,等待选择后加载
+            self.update_piece_info_from_folder()
+
+        except Exception as e:
+            QMessageBox.critical(self, "错误", f"解析文件夹失败: {str(e)}")
 
     def parse_piece_data(self, data_string: str, param_num: int) -> Dict:
         """解析P40xx小片数据"""
@@ -432,6 +566,44 @@ class GFileViewer(QMainWindow):
         self.sheet_vars['P3001'].setText(self.p3000_data.get('P3001', ''))
         self.sheet_vars['P3007'].setText(self.p3000_data.get('P3007', ''))
         self.sheet_vars['P3011'].setText(self.p3000_data.get('P3011', ''))
+        self.piece_seq_label.setText('-')
+
+    def clear_sheet_info(self):
+        """清空原片信息显示"""
+        self.sheet_vars['P3000'].setText('')
+        self.sheet_vars['P3001'].setText('')
+        self.sheet_vars['P3007'].setText('')
+        self.sheet_vars['P3011'].setText('')
+        self.piece_seq_label.setText('-')
+
+    def parse_sheet_sequence(self, filename):
+        """从文件名解析原片序号
+
+        文件名格式: 订单单号_原片序号_片数量_原片长_原片高.g
+        例如: YH260307058_003_1_3660_3000.g
+
+        Args:
+            filename: G文件名
+
+        Returns:
+            原片序号,如果解析失败返回'-'
+        """
+        # 移除扩展名
+        basename = os.path.splitext(filename)[0]
+        parts = basename.split('_')
+
+        # 至少需要5个部分: 订单单号_原片序号_片数量_原片长_原片高
+        if len(parts) >= 5:
+            # 第二部分是原片序号
+            sheet_seq = parts[1]
+            # 尝试转换为整数以去除前导零
+            try:
+                sheet_seq_int = int(sheet_seq)
+                return str(sheet_seq_int)
+            except ValueError:
+                return sheet_seq
+
+        return '-'
 
     def update_piece_info(self):
         """更新小片信息表格"""
@@ -444,20 +616,54 @@ class GFileViewer(QMainWindow):
 
         # 添加数据
         for row_idx, piece in enumerate(self.p4000_data):
-            # 显示的字段: 7,9,10,11,15,1,2,18,17,19
-            self.table.setItem(row_idx, 0, QTableWidgetItem(piece['宝伦7']))   # 客户名
-            self.table.setItem(row_idx, 1, QTableWidgetItem(piece['宝伦9']))   # 货架号
-            self.table.setItem(row_idx, 2, QTableWidgetItem(piece['宝伦10']))  # 订单号
-            self.table.setItem(row_idx, 3, QTableWidgetItem(piece['宝伦11']))  # 订单尺寸
-            self.table.setItem(row_idx, 4, QTableWidgetItem(piece['宝伦15']))  # 条码号
-            self.table.setItem(row_idx, 5, QTableWidgetItem(piece['宝伦1']))   # BL尺寸X
-            self.table.setItem(row_idx, 6, QTableWidgetItem(piece['宝伦2']))   # BL尺寸Y
-            self.table.setItem(row_idx, 7, QTableWidgetItem(piece['宝伦18']))  # 基准边1
-            self.table.setItem(row_idx, 8, QTableWidgetItem(piece['宝伦17'])) # 标签1模板
-            self.table.setItem(row_idx, 9, QTableWidgetItem(piece['宝伦19'])) # 角位号1
+            # 显示的字段: 文件名, 7,9,10,11,15,1,2,18,17,19
+            self.table.setItem(row_idx, 0, QTableWidgetItem(piece.get('文件名', '')))   # 文件名
+            self.table.setItem(row_idx, 1, QTableWidgetItem(piece['宝伦7']))   # 客户名
+            self.table.setItem(row_idx, 2, QTableWidgetItem(piece['宝伦9']))   # 货架号
+            self.table.setItem(row_idx, 3, QTableWidgetItem(piece['宝伦10']))  # 订单号
+            self.table.setItem(row_idx, 4, QTableWidgetItem(piece['宝伦11']))  # 订单尺寸
+            self.table.setItem(row_idx, 5, QTableWidgetItem(piece['宝伦15']))  # 条码号
+            self.table.setItem(row_idx, 6, QTableWidgetItem(piece['宝伦1']))   # BL尺寸X
+            self.table.setItem(row_idx, 7, QTableWidgetItem(piece['宝伦2']))   # BL尺寸Y
+            self.table.setItem(row_idx, 8, QTableWidgetItem(piece['宝伦18']))  # 基准边1
+            self.table.setItem(row_idx, 9, QTableWidgetItem(piece['宝伦17'])) # 标签1模板
+            self.table.setItem(row_idx, 10, QTableWidgetItem(piece['宝伦19'])) # 角位号1
 
             # 设置单元格对齐
-            for col in range(10):
+            for col in range(11):
+                item = self.table.item(row_idx, col)
+                if item:
+                    item.setTextAlignment(Qt.AlignCenter)
+
+        # 更新统计信息
+        self.stats_label.setText(f"共 {row_count} 个小片")
+
+    def update_piece_info_from_folder(self):
+        """从文件夹数据更新小片信息表格"""
+        # 清空表格
+        self.table.setRowCount(0)
+
+        # 设置行数
+        row_count = len(self.all_pieces_data)
+        self.table.setRowCount(row_count)
+
+        # 添加数据
+        for row_idx, piece in enumerate(self.all_pieces_data):
+            # 显示的字段: 文件名, 7,9,10,11,15,1,2,18,17,19
+            self.table.setItem(row_idx, 0, QTableWidgetItem(piece.get('文件名', '')))   # 文件名
+            self.table.setItem(row_idx, 1, QTableWidgetItem(piece['宝伦7']))   # 客户名
+            self.table.setItem(row_idx, 2, QTableWidgetItem(piece['宝伦9']))   # 货架号
+            self.table.setItem(row_idx, 3, QTableWidgetItem(piece['宝伦10']))  # 订单号
+            self.table.setItem(row_idx, 4, QTableWidgetItem(piece['宝伦11']))  # 订单尺寸
+            self.table.setItem(row_idx, 5, QTableWidgetItem(piece['宝伦15']))  # 条码号
+            self.table.setItem(row_idx, 6, QTableWidgetItem(piece['宝伦1']))   # BL尺寸X
+            self.table.setItem(row_idx, 7, QTableWidgetItem(piece['宝伦2']))   # BL尺寸Y
+            self.table.setItem(row_idx, 8, QTableWidgetItem(piece['宝伦18']))  # 基准边1
+            self.table.setItem(row_idx, 9, QTableWidgetItem(piece['宝伦17'])) # 标签1模板
+            self.table.setItem(row_idx, 10, QTableWidgetItem(piece['宝伦19'])) # 角位号1
+
+            # 设置单元格对齐
+            for col in range(11):
                 item = self.table.item(row_idx, col)
                 if item:
                     item.setTextAlignment(Qt.AlignCenter)
@@ -476,7 +682,39 @@ class GFileViewer(QMainWindow):
 
         # 获取选中行的索引(0-based,即内部索引)
         row = selected_items[0].row()
+
+        # 加载原片信息和3C信息
+        self.load_selected_piece_info(row)
         self.update_c3_info(row)
+
+    def load_selected_piece_info(self, row):
+        """加载选中行的原片信息和片序号"""
+        # 获取对应的数据源
+        data_source = self.all_pieces_data if self.current_folder else self.p4000_data
+
+        if row < len(data_source):
+            piece = data_source[row]
+
+            # 更新片序号: 原片序号-小片序号
+            sheet_seq = piece.get('原片序号', '-')
+            piece_seq = piece.get('片序号', '-')
+            self.piece_seq_label.setText(f"{sheet_seq}-{piece_seq}")
+
+            # 显示原片信息
+            if self.current_folder:
+                # 文件夹模式: 从对应的小片数据中获取原片信息
+                sheet_info = piece.get('原片信息', {})
+                self.sheet_vars['P3000'].setText(sheet_info.get('P3000', ''))
+                self.sheet_vars['P3001'].setText(sheet_info.get('P3001', ''))
+                self.sheet_vars['P3007'].setText(sheet_info.get('P3007', ''))
+                self.sheet_vars['P3011'].setText(sheet_info.get('P3011', ''))
+            else:
+                # 单个文件模式,显示原片信息
+                if self.p3000_data:
+                    self.sheet_vars['P3000'].setText(self.p3000_data.get('P3000', ''))
+                    self.sheet_vars['P3001'].setText(self.p3000_data.get('P3001', ''))
+                    self.sheet_vars['P3007'].setText(self.p3000_data.get('P3007', ''))
+                    self.sheet_vars['P3011'].setText(self.p3000_data.get('P3011', ''))
 
     def query_c3_info_from_db(self, material_num):
         """从数据库查询3C料号信息"""
@@ -525,8 +763,8 @@ class GFileViewer(QMainWindow):
 
     def update_c3_info(self, row):
         """更新3C信息显示"""
-        # 获取宝伦17列(索引8)的料号
-        item = self.table.item(row, 8)
+        # 获取宝伦17列(索引9)的料号
+        item = self.table.item(row, 9)
         if not item:
             self.clear_c3_info()
             return
