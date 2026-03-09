@@ -63,6 +63,7 @@ def convert_to_baolun(guiyou_data, piece_num):
         guiyou_data['gy10'],         # 宝伦11: 订单尺寸加片标记
         '',                          # 宝伦12: 空
         '',                          # 宝伦13: 空
+        '',                          # 宝伦14: 空
         guiyou_data['gy11'],         # 宝伦15: 条码号
         guiyou_data['gy14'],         # 宝伦16: 小片数量
         guiyou_data['gy12'],         # 宝伦17: 标签1激光模板序号
