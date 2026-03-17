@@ -1,0 +1,1 @@
+pyinstaller --noconfirm --onefile --windowed --add-data="resources;resources" --upx-dir "E:\Project\PieceInfo_v2\upx-5.0.2-win64" --clean --name "G文件创建" "E:\Project\lkdcut\GCreate.py"

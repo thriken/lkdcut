@@ -27,17 +27,54 @@ from PyQt5.QtCore import Qt
 # ===========================================
 
 # 数据库配置
+IP1 = "192.168.9.250"
+IP2 = "192.168.10.200"
+IP3 = "192.168.10.80"
+def auto_detect_available_ip():
+    """自动检测并选择可访问的IP（使用ping检测，更快）"""
+    import subprocess
+    
+    test_ips = [IP1, IP2, IP3]
+    
+    for ip in test_ips:
+        try:
+            # 使用ping快速检测，-n 1只ping一次，-w 1000等待1秒
+            result = subprocess.run(
+                ['ping', '-n', '1', '-w', '1000', ip],
+                capture_output=True, timeout=2
+            )
+            if result.returncode == 0:
+                print(f"检测到可访问的IP: {ip}")
+                return ip
+        except Exception as e:
+            print(f"IP {ip} 不可访问: {e}")
+            continue
+    
+    print("未检测到可用的远程IP，默认使用IP1")
+    return IP1
+
+# 自动选择可用的IP
+SELECTED_IP = auto_detect_available_ip()
+
 LOCAL_DB_NAME = "glass_data.db"
-REMOTE_DB_PATH = r"\\192.168.9.250\办公室\补片程序\glass_data.db"
-
-# 文件处理配置
-WORK_DIRECTORY = r"\\192.168.9.250\Share\激光文件"
-
+if SELECTED_IP == IP1:
+    REMOTE_DB_PATH = r"\\192.168.9.250\办公室\补片程序\glass_data.db"
+    WORK_DIRECTORY = r"\\192.168.9.250\Share\激光文件"
+elif SELECTED_IP == IP2:
+    REMOTE_DB_PATH = r"\\192.168.10.200\Share\glass_data.db"
+    WORK_DIRECTORY = r"\\192.168.10.200\Share\激光文件"
+else:
+    REMOTE_DB_PATH = r"\\192.168.10.80\Share\glass_data.db"
+    WORK_DIRECTORY = r"\\192.168.10.80\Share\激光文件"
 print(f"WORK_DIRECTORY: {WORK_DIRECTORY}")
 print(f"REMOTE_DB_PATH: {REMOTE_DB_PATH}")
+
 # Excel导出配置
 EXCEL_TEMPLATE = "origin.xls"
 EXPORT_DIRECTORY = os.path.join(os.path.expanduser("~"), "Desktop", "")
+
+# G代码导出配置
+GCODE_EXPORT_DIR = r"D:\\Program Files\\NewGlass\\DrillWork\\"
 
 # ===========================================
 # Utils 功能
@@ -341,8 +378,15 @@ class DatabaseManager:
         try:
             # 检查本地数据库是否存在
             local_exists = os.path.exists(self.db_name)
-            remote_exists = os.path.exists(self.remote_db_name)
+            remote_exists = False
             
+            # 尝试访问远程数据库，增加错误处理
+            try:
+                remote_exists = os.path.exists(self.remote_db_name)
+            except Exception as e:
+                print(f"无法访问远程路径 {self.remote_db_name}: {e}")
+                log_message("远程数据库不可访问，将使用本地数据库")
+                
             if not remote_exists:
                 log_message("远程数据库不存在，将使用本地数据库")
                 # 不直接return，让程序继续使用本地数据库运行
@@ -355,7 +399,19 @@ class DatabaseManager:
                 
             # 获取文件修改时间和大小
             local_mtime = os.path.getmtime(self.db_name)
-            remote_mtime = os.path.getmtime(self.remote_db_name)
+            remote_mtime = None
+            
+            try:
+                if remote_exists:
+                    remote_mtime = os.path.getmtime(self.remote_db_name)
+            except Exception as e:
+                print(f"无法获取远程数据库时间: {e}")
+                remote_exists = False  # 标记为不可用
+            
+            # 只有远程数据库可用时才进行比较
+            if not remote_exists or remote_mtime is None:
+                log_message("远程数据库不可用，将使用本地数据库")
+                return
             
             # 比较修改时间，添加相等的情况判断
             if remote_mtime > local_mtime:
@@ -846,6 +902,121 @@ class ExcelExporter:
             print(f"导出Excel时发生错误: {e}")
             return False
 
+    def export_g_code(self, piece_data, output_path=None, file_name=None):
+        """
+        导出单张G代码文件
+        
+        规则：
+        - cutsizeX = cut_width 与 cut_height 中的较大值
+        - cutsizeY = cut_height 与 cut_height 中的较小值
+        - displayX = order_width 和 order_height 中的较大值  
+        - displayY = order_height 中的较小值
+        - 这两组会同时交换
+        """
+        try:
+            # 获取原始尺寸
+            material_code = piece_data.get('material_code', '')
+            thickness = piece_data.get('thickness', 5)
+            
+            # 获取切割尺寸
+            cut_width = piece_data.get('cut_width', 0)
+            cut_height = piece_data.get('cut_height', 0)
+            cut_x = piece_data.get('cut_x', 0)
+            cut_y = piece_data.get('cut_y', 0)
+            
+            # 获取订单尺寸
+            order_width = piece_data.get('order_width', 0)
+            order_height = piece_data.get('order_height', 0)
+            
+            # 计算 cutsizeX/cutsizeY (取较大/较小值)
+            cutsizeX = max(cut_width, cut_height)
+            cutsizeY = min(cut_width, cut_height)
+            raw_width = cutsizeX + 30
+            raw_height = cutsizeY + 30
+            # 计算 displayX/displayY (取较大/较小值)
+            displayX = max(order_width, order_height)
+            displayY = min(order_width, order_height)
+            
+            # 其他字段
+            customer_name = piece_data.get('customer_name', '')
+            piece_number = piece_data.get('piece_number', 1)
+            order_number = piece_data.get('order_number', '')
+            dm_code = piece_data.get('dm_code', '')
+            order_size = piece_data.get('order_size', '')
+            reference_edge = piece_data.get('reference_edge', '')
+            group_number = piece_data.get('group_number', '')
+            code_3c_position = piece_data.get('code_3c_position', '')
+            dm_code_position = piece_data.get('dm_code_position', '')
+            cutYdirection = cutsizeY+30-3
+
+            # 生成G代码内容
+            g_code = f"""N01  P3000 = {raw_width}
+N02  P3001 = {raw_height}
+N03  P3002 = 0
+N04  P3003 = 0
+N05  P3004 = 0
+N06  P3005 = 0
+N07  P3006 = 1
+N08  P3007 = {material_code}
+N09  P3008 = 1
+N10  P3009 = 1
+N11  P3010 = 
+N12  P3011 = {thickness}
+N13  P4001= {cutsizeX}_{cutsizeY}_{cut_x}_{cut_y}_{displayX}_{displayY}_{customer_name}_1_{group_number}_{order_number}_{dm_code}____{dm_code}__{order_size}_{reference_edge}_{group_number}_{code_3c_position}_{dm_code_position}_________
+
+G17
+G92 X0 Y0
+G90
+G00 X3 Y{cutsizeY}
+M03
+M09
+G01 X{cutsizeX} Y{cutsizeY}
+M10
+G00 X{cutsizeX} Y3
+M09
+G01 X{cutsizeX} Y{cutYdirection}
+M10
+M04
+G90G00X0Y0Z0
+M23
+M24
+M30
+"""
+            
+            # 如果没有指定输出路径，自动生成
+            if not output_path:
+                # 使用文件名作为子目录名，去掉扩展名
+                if file_name:
+                    folder_name = os.path.splitext(file_name)[0]
+                else:
+                    folder_name = f"export_{order_number}"
+                
+                # 创建子目录路径
+                sub_dir = os.path.join(GCODE_EXPORT_DIR, folder_name)
+                
+                # 自动创建子目录
+                os.makedirs(sub_dir, exist_ok=True)
+                
+                # 文件名规则: {order_size}去除斜杠_1_{raw_width}_{raw_height}.g
+                order_size_clean = order_size.replace('/', '').replace('\\', '')
+                g_filename = f"{order_size_clean}_1_{raw_width}_{raw_height}.g"
+                
+                output_path = os.path.join(sub_dir, g_filename)
+            
+            # 确保目录存在
+            os.makedirs(os.path.dirname(output_path), exist_ok=True)
+            
+            # 写入文件
+            with open(output_path, 'w', encoding='gb18030') as f:
+                f.write(g_code)
+            
+            print(f"G文件已导出: {output_path}")
+            return output_path
+            
+        except Exception as e:
+            print(f"导出G文件时发生错误: {e}")
+            return None
+
 # 主窗口
 # 程序功能：
 # 1. 扫描文件夹
@@ -1114,6 +1285,11 @@ class MainWindow(QMainWindow):
         append_export_button = QPushButton('追加导出')
         append_export_button.clicked.connect(lambda: self.export_excel(True))
         search_layout.addWidget(append_export_button)
+        
+        # 导出G文件按钮
+        export_g_button = QPushButton('导出G文件')
+        export_g_button.clicked.connect(self.export_g_file)
+        search_layout.addWidget(export_g_button)
         
         main_layout.addWidget(search_widget)
 
@@ -1470,6 +1646,96 @@ class MainWindow(QMainWindow):
                 
         except Exception as e:
             QMessageBox.critical(self, '错误', f'导出时出错: {str(e)}')
+
+    def export_g_file(self):
+        """导出选中的数据为G代码文件"""
+        selected_rows = self.table.selectionModel().selectedRows()
+        if not selected_rows:
+            QMessageBox.warning(self, '警告', '请先选择要导出的数据')
+            return
+        
+        try:
+            for row in selected_rows:
+                row_index = row.row()
+                directory = self.table.item(row_index, 0).text()
+                file_name = self.table.item(row_index, 1).text()
+                customer_name = self.table.item(row_index, 2).text()
+                dm_code = self.table.item(row_index, 3).text()
+                order_size = self.table.item(row_index, 4).text()
+                
+                # 解析订单尺寸
+                try:
+                    size_parts = order_size.split('x' if 'x' in order_size else '/')
+                    order_width = float(size_parts[0].strip())
+                    order_height = order_width
+                    if len(size_parts) > 1:
+                        try:
+                            order_height = float(size_parts[1].strip())
+                        except ValueError:
+                            order_height = order_width
+                except (ValueError, IndexError):
+                    order_width = 0.0
+                    order_height = 0.0
+                
+                piece_dict = {
+                    'raw_width': 0,
+                    'raw_height': 0,
+                    'material_code': '',
+                    'thickness': 5,
+                    'cut_width': 0,
+                    'cut_height': 0,
+                    'cut_x': 0,
+                    'cut_y': 0,
+                    'order_width': order_width,
+                    'order_height': order_height,
+                    'customer_name': customer_name,
+                    'piece_number': 1,
+                    'order_number': '',
+                    'dm_code': dm_code,
+                    'order_size': order_size,
+                    'reference_edge': '',
+                    'group_number': '',
+                    'code_3c_position': '',
+                    'dm_code_position': '',
+                }
+                
+                # 从数据库获取完整信息
+                file_id = self.db.get_file_id(directory, file_name)
+                if file_id:
+                    file_data = self.db.get_file_data(file_id)
+                    if file_data:
+                        for piece in file_data:
+                            if piece[17] == dm_code and piece[18] == order_size:
+                                piece_dict.update({
+                                    'raw_width': piece[2],  # raw_width
+                                    'raw_height': piece[3],  # raw_height
+                                    'material_code': piece[4],
+                                    'thickness': piece[7],
+                                    'cut_width': piece[8],
+                                    'cut_height': piece[9],
+                                    'cut_x': piece[10],
+                                    'cut_y': piece[11],
+                                    'order_width': piece[12],
+                                    'order_height': piece[13],
+                                    'customer_name': piece[14],
+                                    'piece_number': piece[15],
+                                    'order_number': piece[16],
+                                    'reference_edge': piece[19],
+                                    'group_number': piece[20],
+                                    'code_3c_position': piece[21],
+                                    'dm_code_position': piece[22],
+                                })
+                                break
+                
+                # 导出G文件，传递文件名用于创建子目录
+                result = self.exporter.export_g_code(piece_dict, file_name=file_name)
+                if result:
+                    print(f"G文件导出成功: {result}")
+            
+            QMessageBox.information(self, '成功', f'已导出 {len(selected_rows)} 个G文件')
+            
+        except Exception as e:
+            QMessageBox.critical(self, '错误', f'导出G文件时出错: {str(e)}')
 
     def load_data(self):
         # 从数据库加载并显示数据
