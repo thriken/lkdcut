@@ -253,8 +253,12 @@ class GCreteWindow(QMainWindow):
             self.selected_material = None
             return
         
-        # 构建图片路径
-        img_path = os.path.join(os.path.dirname(__file__), 'resources', 'img', f'{material_id}.png')
+        # 构建图片路径（兼容打包后路径）
+        if getattr(sys, 'frozen', False):
+            base_path = sys._MEIPASS
+        else:
+            base_path = os.path.dirname(__file__)
+        img_path = os.path.join(base_path, 'resources', 'img', f'{material_id}.png')
         
         # 尝试加载图片
         if os.path.exists(img_path):
@@ -277,7 +281,12 @@ class GCreteWindow(QMainWindow):
     
     def query_material_info(self, material_id):
         """查询料号信息"""
-        db_path = os.path.join(os.path.dirname(__file__), '3c.db')
+        # 兼容打包后的路径
+        if getattr(sys, 'frozen', False):
+            base_path = sys._MEIPASS
+        else:
+            base_path = os.path.dirname(__file__)
+        db_path = os.path.join(base_path, '3c.db')
         if not os.path.exists(db_path):
             return
         
@@ -444,7 +453,7 @@ M30
         dims = self.calculate_dimensions()
         order_size = f"{int(dims['order_width'])}x{int(dims['order_height'])}"
         order_size_clean = order_size.replace('/', '').replace('\\', '')
-        default_name = f"{order_size_clean}_1_{int(dims['raw_width'])}_{int(dims['raw_height'])}.g"
+        default_name = f"{order_size_clean}_1_1_{int(dims['raw_width'])}_{int(dims['raw_height'])}.g"
         
         # 选择保存位置
         filename, _ = QFileDialog.getSaveFileName(

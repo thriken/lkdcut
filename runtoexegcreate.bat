@@ -1,1 +1,2 @@
-pyinstaller --noconfirm --onefile --windowed --add-data="resources;resources" --upx-dir "E:\Project\PieceInfo_v2\upx-5.0.2-win64" --clean --name "GÎÄ¼þ´´½¨" "E:\Project\lkdcut\GCreate.py"
+chcp 65001 >nul
+pyinstaller --noconfirm --onefile --windowed --add-data="resources;resources" --add-data="3c.db;." --upx-dir "E:\Project\PieceInfo_v2\upx-5.0.2-win64" --clean --name "Gæ–‡ä»¶åˆ›å»ºå™¨" "E:\Project\lkdcut\GCreate.py"
