@@ -64,7 +64,7 @@ elif SELECTED_IP == IP2:
     REMOTE_DB_PATH = r"\\192.168.10.200\Share\glass_data.db"
     WORK_DIRECTORY = r"\\192.168.10.200\Share\激光文件"
 else:
-    REMOTE_DB_PATH = r"\\192.168.10.80\Share\glass_data.db"
+    REMOTE_DB_PATH = r"\\192.168.10.80\办公室\补片程序\glass_data.db"
     WORK_DIRECTORY = r"\\192.168.10.80\Share\激光文件"
 print(f"WORK_DIRECTORY: {WORK_DIRECTORY}")
 print(f"REMOTE_DB_PATH: {REMOTE_DB_PATH}")
@@ -1512,7 +1512,7 @@ class MainWindow(QMainWindow):
                 else:
                     if 'x' in search_text.lower():
                         try:
-                            width, height = map(float, search_text.lower().split('x'))
+                            width, height = map(int, search_text.lower().split('x'))
                             size = f"{width}x{height}"
                         except ValueError:
                             QMessageBox.warning(self, '警告', '请输入正确的尺寸格式，例如: 1000x2000')
