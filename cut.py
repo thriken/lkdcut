@@ -878,7 +878,7 @@ class ExcelExporter:
                     ws.write(current_row, 2, row.get('cut_height', ''))
                     ws.write(current_row, 3, 1)
                     ws.write(current_row, 4, row.get('order_number', ''))
-                    ws.write(current_row, 5, row.get('customer_name', ''))
+                    ws.write(current_row, 5, row.get('customer_name', '')[:6])
                     ws.write(current_row, 17, row.get('dm_code', ''))
                     ws.write(current_row, 20, row.get('order_size', ''))
                     ws.write(current_row, 21, row.get('reference_edge', ''))
