@@ -962,7 +962,7 @@ N09  P3008 = 1
 N10  P3009 = 1
 N11  P3010 = 
 N12  P3011 = {thickness}
-N13  P4001= {cutsizeX}_{cutsizeY}_{cut_x}_{cut_y}_{displayX}_{displayY}_{customer_name}_1_{group_number}_{order_number}_{dm_code}____{dm_code}__{order_size}_{reference_edge}_{group_number}_{code_3c_position}_{dm_code_position}_________
+N13  P4001= {cutsizeX}_{cutsizeY}_0_0_{displayX}_{displayY}_{customer_name}_1_{group_number}_{order_number}_{dm_code}____{dm_code}__{order_size}_{reference_edge}_{group_number}_{code_3c_position}_{dm_code_position}_________
 
 G17
 G92 X0 Y0
@@ -975,12 +975,9 @@ M10
 G00 X{cutsizeX} Y3
 M09
 G01 X{cutsizeX} Y{cutYdirection}
-M10
-M04
+M03
+M09
 G90G00X0Y0Z0
-M23
-M24
-M30
 """
             
             # 如果没有指定输出路径，自动生成
@@ -997,9 +994,9 @@ M30
                 # 自动创建子目录
                 os.makedirs(sub_dir, exist_ok=True)
                 
-                # 文件名规则: {order_size}去除斜杠_1_{raw_width}_{raw_height}.g
+                # 文件名规则: {order_size}去除斜杠_1_1_{raw_width}_{raw_height}.g
                 order_size_clean = order_size.replace('/', '').replace('\\', '')
-                g_filename = f"{order_size_clean}_1_{raw_width}_{raw_height}.g"
+                g_filename = f"{order_size_clean}_1_1_{raw_width}_{raw_height}.g"
                 
                 output_path = os.path.join(sub_dir, g_filename)
             
