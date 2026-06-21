@@ -22,7 +22,7 @@ exe = EXE(
     a.binaries,
     a.datas,
     [],
-    name='玻璃切割数据管理2026',
+    name='玻璃切割数据管理',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,

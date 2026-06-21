@@ -1,1 +1,1 @@
-pyinstaller --noconfirm --onefile --windowed --add-data="origin.xls:." --upx-dir "E:\Project\PieceInfo_v2\upx-5.0.2-win64" --clean --name "玻璃切割数据管理2026" "E:\Project\lkdcut\cut.py"
+pyinstaller --noconfirm --onefile --windowed --add-data="origin.xls:." --upx-dir "E:\Project\PieceInfo_v2\upx-5.0.2-win64" --clean --name "玻璃切割数据管理" "E:\Project\lkdcut\cut.py"

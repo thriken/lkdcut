@@ -1,2 +1,5 @@
 build/*
 dist/*
+glass_data.db
+glass_data.db.bak
+.vscode/*
